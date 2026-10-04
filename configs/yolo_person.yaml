@@ -29,14 +29,16 @@ paths:
 extract_frames:
   strategies: [interval]        # 只要均匀采样；scene 会把整集解码两遍
   interval_seconds: 2.0
-  max_frames_per_video: 150     # 先 150 帧看效果，正式跑设 null（不限制）
+  max_frames_per_video: null     # 先 150 帧看效果，正式跑设 null（不限制）
   jpeg_quality: 95
 
 detect:
   type: yolo_v8
   batch_size: 8
   params:
-    weights: yolov8n.pt         # 仓库根目录已存在；换成动漫专用权重效果更好
+    # 权重放 models/（ultralytics 首次运行也会自动下载到那里）
+    # 换成动漫专用权重效果更好：models/xxx.pt
+    weights: models/yolov8n.pt
     conf_threshold: 0.15        # ← 关键：低阈值
     iou_threshold: 0.5
     imgsz: 640                  # 远景小人漏得多就调到 960（更慢）

@@ -250,11 +250,20 @@ def init_config(
     """Copy a starter configuration (default or demo) to a new path."""
     import shutil
 
-    template = source or (Path(__file__).resolve().parents[2] / "configs" / "default.yaml")
-    if not template.is_file():
-        template = Path(DEFAULT_CONFIG)
-    if not template.is_file():
-        _fail(f"no template found at {template}")
+    candidates = [source] if source else [
+        # repo layout: <repo>/configs
+        Path(__file__).resolve().parents[2] / "configs" / "default.yaml",
+        # installed layout: <install>/venv/Scripts/python.exe -> <install>/configs
+        Path(sys.executable).resolve().parent.parent / "configs" / "default.yaml",
+        # fall back to the current working directory
+        Path(DEFAULT_CONFIG),
+    ]
+    template = next((path for path in candidates if path and path.is_file()), None)
+    if template is None:
+        _fail(
+            "no configuration template found. Looked in: "
+            + ", ".join(str(path) for path in candidates if path)
+        )
     if target.exists() and not force:
         _fail(f"{target} already exists (use --force to overwrite)")
     target.parent.mkdir(parents=True, exist_ok=True)
