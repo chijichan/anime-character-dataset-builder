@@ -40,6 +40,7 @@ __all__ = [
     "hamming_distance",
     "mean_abs_diff",
     "center_square",
+    "shift_into_frame",
     "background_lab",
     "saliency_distance",
     "apply_background_mask",
@@ -215,6 +216,36 @@ def resize_long_side(image: np.ndarray, long_side: Optional[int]) -> np.ndarray:
     )
 
 
+def shift_into_frame(
+    rect: Sequence[float], width: int, height: int
+) -> Tuple[float, float, float, float]:
+    """Translate ``rect`` so it lies inside the frame, when it fits.
+
+    Padding invents pixels: with ``pad_mode: edge`` a box hanging over the
+    border produced a wide smeared band of replicated edge pixels (very visible
+    on tall, squared crops near a frame edge). Sliding the crop window instead
+    keeps every pixel real. A rectangle larger than the frame cannot fit and is
+    returned unchanged - the caller then pads, as a last resort.
+    """
+    x1, y1, x2, y2 = (float(v) for v in rect)
+    box_width, box_height = x2 - x1, y2 - y1
+    if box_width <= width:
+        if x1 < 0:
+            x2 -= x1
+            x1 = 0.0
+        elif x2 > width:
+            x1 -= x2 - width
+            x2 = float(width)
+    if box_height <= height:
+        if y1 < 0:
+            y2 -= y1
+            y1 = 0.0
+        elif y2 > height:
+            y1 -= y2 - height
+            y2 = float(height)
+    return x1, y1, x2, y2
+
+
 def crop_region(
     image: np.ndarray,
     bbox: Sequence[float],
@@ -223,17 +254,38 @@ def crop_region(
     square: bool = False,
     pad_mode: str = "edge",
     fill: Tuple[int, int, int] = (0, 0, 0),
+    fit_inside: bool = True,
 ) -> Tuple[np.ndarray, BBox]:
     """Crop ``bbox`` from ``image``, expanding/squarifying as configured.
 
     Returns ``(crop, rect)`` where ``rect`` is the realised crop rectangle **in
-    source-frame coordinates**. ``rect`` may extend outside the frame when the
-    box was clamped; those pixels come from ``pad_mode``. Recording the realised
-    rectangle (rather than the raw detector box) is what makes every exported
-    image reproducible from ``metadata.csv`` alone.
+    source-frame coordinates**. Recording the realised rectangle (rather than
+    the raw detector box) is what makes every exported image reproducible from
+    ``metadata.csv`` alone.
+
+    With ``fit_inside`` (the default) the window is kept inside the frame in two
+    ways, both meant to avoid fabricated pixels:
+
+    * a square crop is never grown beyond ``min(frame_width, frame_height)``, so
+      a close-up that fills the frame yields the largest square that still fits
+      instead of a padded one;
+    * the window is shifted back inside the frame rather than padded whenever it
+      fits (see :func:`shift_into_frame`).
+
+    ``rect`` still reports negative/oversized coordinates in the rare case where
+    the frame is smaller than the requested window; those pixels come from
+    ``pad_mode``.
     """
     height, width = image.shape[:2]
-    x1, y1, x2, y2 = expand_bbox(bbox, expand_ratio, square=square)
+    if fit_inside:
+        x1, y1, x2, y2 = expand_bbox(bbox, expand_ratio, square=False)
+        if square:
+            cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            side = min(max(x2 - x1, y2 - y1), float(min(width, height)))
+            x1, y1, x2, y2 = cx - side / 2, cy - side / 2, cx + side / 2, cy + side / 2
+        x1, y1, x2, y2 = shift_into_frame((x1, y1, x2, y2), width, height)
+    else:
+        x1, y1, x2, y2 = expand_bbox(bbox, expand_ratio, square=square)
     ix1, iy1, ix2, iy2 = (int(round(v)) for v in (x1, y1, x2, y2))
     if ix2 <= ix1 or iy2 <= iy1:
         raise StageError(f"degenerate crop rectangle {(ix1, iy1, ix2, iy2)}")

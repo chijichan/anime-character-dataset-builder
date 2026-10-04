@@ -47,10 +47,40 @@ def test_crop_region_returns_realised_rect_and_handles_edges() -> None:
     assert rect == (50, 40, 80, 60)
     assert crop.shape[:2] == (20, 30)
 
-    # A box crossing the frame border is padded, never wrapped or crashed.
-    padded, rect = crop_region(image, (0, 0, 20, 20), expand_ratio=2.0, square=True)
-    assert padded.shape[0] == padded.shape[1] == 40
-    assert rect[0] < 0
+    # A box crossing the frame border is slid back inside instead of padded, so
+    # no fabricated (smeared) pixels end up in the dataset.
+    shifted, rect = crop_region(image, (0, 0, 20, 20), expand_ratio=2.0, square=True)
+    assert shifted.shape[0] == shifted.shape[1] == 40
+    assert rect == (0, 0, 40, 40)
+    assert min(rect) >= 0 and rect[2] <= 200 and rect[3] <= 100
+
+
+def test_square_crop_is_capped_to_the_frame() -> None:
+    """A close-up that fills the frame must not force a padded square."""
+    image = np.zeros((100, 200, 3), dtype=np.uint8)
+    crop, rect = crop_region(image, (0, 0, 200, 100), expand_ratio=1.25, square=True)
+    assert crop.shape[:2] == (100, 100), "square side is capped to min(frame_w, frame_h)"
+    assert min(rect) >= 0 and rect[2] <= 200 and rect[3] <= 100
+
+
+def test_crop_region_still_pads_when_the_window_cannot_fit() -> None:
+    """Only a window larger than the whole frame is padded."""
+    image = np.zeros((40, 40, 3), dtype=np.uint8)
+    crop, rect = crop_region(image, (0, 0, 40, 40), expand_ratio=2.0, square=False,
+                             pad_mode="constant", fill=(7, 7, 7))
+    assert crop.shape[:2] == (80, 80)
+    assert rect[0] < 0 and rect[2] > 40
+    assert tuple(crop[0, 0]) == (7, 7, 7)
+
+
+def test_shift_into_frame_moves_but_never_resizes() -> None:
+    from acdb.utils.image import shift_into_frame
+
+    assert shift_into_frame((-10, -10, 30, 30), 100, 100) == (0, 0, 40, 40)
+    assert shift_into_frame((90, 90, 110, 110), 100, 100) == (80, 80, 100, 100)
+    assert shift_into_frame((10, 10, 30, 30), 100, 100) == (10, 10, 30, 30)
+    # Too large to fit: returned untouched so the caller pads.
+    assert shift_into_frame((-5, -5, 200, 200), 100, 100) == (-5, -5, 200, 200)
 
 
 def test_pad_to_square_and_resize() -> None:
