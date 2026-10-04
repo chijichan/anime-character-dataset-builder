@@ -1,0 +1,202 @@
+# =============================================================================
+# ACDB default configuration
+# -----------------------------------------------------------------------------
+# This is the "real" pipeline: YOLO detection + timm embeddings + HDBSCAN.
+# It requires the optional extras:  pip install -e ".[all]"
+#
+# Every value below can be overridden from the CLI, e.g.
+#   acdb detect --set detect.filter.min_conf=0.5 --set project.device=cuda
+# Any path that is not absolute is resolved against the project root
+# (the directory you run `acdb` from, or --root if you pass it).
+#
+# Unknown keys are a hard error, so a typo can never silently do nothing.
+# =============================================================================
+
+project:
+  name: anime-character-dataset
+  seed: 1337
+  # auto -> CUDA when available, then Apple MPS, else CPU.
+  device: auto
+  # Optional global cap; useful to smoke-test on a huge input tree.
+  max_videos: null
+
+paths:
+  input_dir: data/input            # your video files live here (nested is fine)
+  work_dir: data                   # parent of the intermediate artefact dirs
+  frames_dir: data/frames          # extract-frames output (raw frames)
+  crops_dir: data/crops            # crop output (one file per detection)
+  rejected_dir: data/rejected      # crops dropped by `filter`, kept for review
+  dataset_dir: data/dataset        # final ImageFolder dataset
+  metadata_dir: data/metadata      # all CSV/JSON bookkeeping + .state/
+  clusters_dir: data/clusters      # per-cluster review folders for humans
+  logs_dir: logs
+
+# --- File naming contract ----------------------------------------------------
+# These templates ARE the hard output contract. Change them only if you also
+# change the consumers of your dataset.
+naming:
+  frame_template: "{video_id}_f{frame_idx:06d}.jpg"
+  crop_template: "{video_id}_f{frame_idx:06d}_b{bbox_idx:02d}.jpg"
+  final_template: "{anime}__{character}__{video_id}_f{frame_idx:06d}_b{bbox_idx:02d}.jpg"
+  video_id_slug_maxlen: 40
+  video_id_hash_len: 8
+
+video:
+  extensions: [".mp4", ".mkv", ".avi", ".webm", ".mov", ".flv", ".m4v", ".ts", ".wmv"]
+  recursive: true
+  skip_hidden: true
+
+# --- Stage 1: extract-frames -------------------------------------------------
+extract_frames:
+  # Any combination of: interval | scene | keyframe. Duplicates are merged.
+  strategies: [interval, scene]
+  interval_seconds: 1.0            # used by `interval`
+  interval_frames: null            # if set, wins over interval_seconds
+  scene_threshold: 27.0            # PySceneDetect ContentDetector threshold
+  scene_min_gap_seconds: 0.4       # never emit two scene frames closer than this
+  keyframe_backend: auto           # auto | pyav | scene
+  max_frames_per_video: null
+  resize_long_side: null           # e.g. 720 to shrink before detection
+  jpeg_quality: 95
+  # Drop frames that are pixel-identical to the previously emitted one.
+  skip_static: true
+  static_diff_threshold: 0.5       # mean abs diff (0-255) below this = static
+
+# --- Stage 2: detect ---------------------------------------------------------
+detect:
+  # yolo_v8 | yolo11 | anime_yolo | anime_yolo_seg | saliency
+  # `saliency` is a dependency-free classical detector and is what the demo
+  # configuration uses; everything else routes to ultralytics.
+  type: yolo_v8
+  batch_size: 8                    # frames per inference call
+  params:
+    weights: null                  # explicit local .pt path (recommended)
+    model: yolov8n.pt              # ultralytics name; auto-downloaded if absent
+    conf_threshold: 0.35
+    iou_threshold: 0.5
+    imgsz: 640
+    # COCO class ids to keep. 0 = person. Anime checkpoints usually expose a
+    # single class, in which case `class_names` below is what you tune.
+    classes: [0]
+    class_names: [person]          # labels written to the `class_name` column
+    max_detections: 20
+    device: auto                   # overrides project.device for this model
+    half: false                    # fp16 (CUDA only)
+    agnostic_nms: false
+    retina_masks: false
+  filter:
+    min_conf: 0.35                 # secondary gate after the model threshold
+    min_side: 48                   # px, shortest bbox side
+    max_side: null                 # px, longest bbox side (null = no limit)
+    aspect_ratio: [0.2, 5.0]       # w/h must lie inside this range
+    min_area_ratio: 0.0015         # bbox area / frame area
+    max_per_frame: 10              # keep the N highest-confidence boxes
+    nms_across_frames: false       # collapse near-identical boxes frame to frame
+
+# --- Stage 3: crop -----------------------------------------------------------
+crop:
+  expand_ratio: 1.2                # bbox scaled about its centre
+  square: true                     # pad the short side so w == h
+  # false -> neutralise the background with `background_fill`. The foreground is
+  # estimated per crop from its own border ring (see README -> design decisions);
+  # this works with any detector but is an approximation, not matting.
+  keep_background: true
+  background_fill: [0, 0, 0]
+  background_min_distance: 26.0    # Lab distance used by that estimate
+  pad_mode: edge                   # edge | reflect | constant
+  min_output_side: 32
+  output_size: null                # e.g. 256 to resize every crop
+  jpeg_quality: 95
+
+# --- Stage 4: dedup ----------------------------------------------------------
+dedup:
+  phash_size: 8                    # 8 -> 64-bit pHash
+  phash_hamming: 6                 # coarse gate: <= this counts as a candidate
+  cosine_threshold: 0.985          # fine gate on L2-normalised embeddings
+  # Which member of a duplicate group survives.
+  keep: best_quality               # best_quality | first | largest
+  # true  -> only compare crops coming from the same source video (safer when
+  #          different shows share a visual style)
+  same_video_only: false
+  max_group_size: 50               # safety valve: surplus members of a bigger group are kept
+
+# --- Stage 5 (shared): features ---------------------------------------------
+# Used by `dedup` (fine gate) and by `cluster`. Cached in
+# data/metadata/features.npz keyed by image content hash.
+features:
+  # timm | onnx | color_hist | clip
+  type: timm
+  normalize: true                  # L2-normalise embeddings before use
+  batch_size: 32
+  params:
+    # ---- timm ----
+    model_name: resnet18
+    pretrained: true
+    input_size: 224
+    pool: avg                      # avg | cls (transformer checkpoints)
+    # ---- onnx ----
+    onnx_path: null
+    providers: [CPUExecutionProvider]
+    input_name: null
+    output_name: null
+    mean: [0.485, 0.456, 0.406]
+    std: [0.229, 0.224, 0.225]
+    # ---- color_hist (classical, no weights) ----
+    color_bins: 8
+    spatial_grid: 2
+    include_gradient: true
+
+# --- Stage 6: filter (quality) ----------------------------------------------
+quality:
+  enabled: true
+  min_laplacian_var: 60.0          # blur gate (variance of Laplacian)
+  min_side_px: 64                  # hard minimum on the shorter crop side
+  max_overexposed_ratio: 0.35      # fraction of pixels with V >= 250
+  max_underexposed_ratio: 0.60     # fraction of pixels with V <= 5
+  min_colorfulness: 4.0            # Hasler-Susstrunk colorfulness
+  min_score: 0.25                  # composite score gate
+  weights:                         # must sum to ~1.0 (auto-normalised)
+    sharpness: 0.45
+    exposure: 0.25
+    contrast: 0.15
+    colorfulness: 0.15
+  move_rejected: true              # move rejects to paths.rejected_dir
+
+# --- Stage 7: cluster --------------------------------------------------------
+cluster:
+  type: hdbscan                    # hdbscan | kmeans | agglomerative
+  params:
+    min_cluster_size: 4
+    min_samples: 2
+    metric: euclidean
+    cluster_selection_epsilon: 0.0
+    # ---- kmeans / agglomerative ----
+    n_clusters: 12
+    linkage: ward
+  reduce_dim: pca                  # pca | none
+  pca_components: 32               # clipped to n_samples-1 automatically
+  representatives_per_cluster: 12  # copies exported to data/clusters/cluster_N/
+  noise_as_unknown: true           # HDBSCAN label -1 -> unknown/
+
+# --- Stage 8: split ----------------------------------------------------------
+split:
+  ratios: {train: 0.8, val: 0.1, test: 0.1}
+  seed: 1337
+  stratify: true                   # keep the class ratio inside every split
+  prevent_leakage: true            # one (video, character) never spans splits
+  min_images_per_class: 2          # classes below this are dropped + reported
+
+# --- Stage 9: export ---------------------------------------------------------
+export:
+  copy_mode: copy                  # copy | hardlink | symlink
+  overwrite: false
+  drop_unknown: true               # keep unknown/ out of the final dataset
+  min_images_per_class: 1
+  stats_path: data/metadata/class_stats.csv
+
+logging:
+  level: INFO                      # console
+  file_level: DEBUG                # file
+  rotation: 10 MB
+  retention: 14
+  colorize: true

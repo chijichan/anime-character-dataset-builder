@@ -1,0 +1,130 @@
+# =============================================================================
+# ACDB demo configuration - fully offline, CPU-only, no model weights.
+# -----------------------------------------------------------------------------
+# Inherits configs/default.yaml (deep merge, keys here win) and swaps the two
+# learned components for dependency-free classical ones:
+#
+#   detect.type   : saliency    -> border-referenced saliency + contours
+#   features.type : color_hist  -> HSV spatial histogram
+#
+# Everything else (stage order, artefacts, metadata contract, resume logic)
+# is byte-for-byte the same code path as the "real" configuration, which is the
+# point: swapping a detector or a feature extractor is a config edit, not a
+# code edit.
+#
+# Budget: 3 synthetic videos x 12 s @ 12 fps -> ~36 frames -> ~70 crops,
+# whole pipeline well under a minute on a laptop CPU.
+# =============================================================================
+base: default.yaml
+
+project:
+  name: acdb-demo
+  seed: 20240517
+  device: cpu
+  max_videos: null
+
+paths:
+  input_dir: data/input
+  work_dir: data
+  frames_dir: data/frames
+  crops_dir: data/crops
+  rejected_dir: data/rejected
+  dataset_dir: data/dataset
+  metadata_dir: data/metadata
+  clusters_dir: data/clusters
+  logs_dir: logs
+
+extract_frames:
+  strategies: [interval]
+  interval_seconds: 1.0
+  max_frames_per_video: 12          # 12 s of video -> 12 frames per video
+  jpeg_quality: 92
+  skip_static: true
+
+detect:
+  type: saliency
+  batch_size: 8
+  params:
+    # Lab distance from the background colour estimated on a border ring.
+    min_distance: 26.0
+    border_frac: 0.08
+    blur_ksize: 5
+    morph_ksize: 7
+    min_area_px: 400
+    max_boxes: 8
+    conf_from_saliency: [0.30, 0.95]   # map mean distance -> confidence
+    class_names: [character]
+  filter:
+    min_conf: 0.3
+    min_side: 40
+    max_side: null
+    aspect_ratio: [0.15, 6.0]
+    min_area_ratio: 0.004
+    max_per_frame: 6
+
+crop:
+  expand_ratio: 1.25
+  square: true
+  keep_background: true
+  pad_mode: edge
+  min_output_side: 32
+  jpeg_quality: 92
+dedup:
+  phash_size: 8
+  phash_hamming: 8            # synthetic frames repeat a lot -> slightly looser
+  cosine_threshold: 0.995
+  keep: best_quality
+  same_video_only: true       # never merge a character across different shows
+
+features:
+  type: color_hist
+  normalize: true
+  batch_size: 64
+  params:
+    color_bins: 8
+    spatial_grid: 2
+    include_gradient: true
+
+quality:
+  enabled: true
+  # Flat-shaded synthetic art has far less edge energy than real footage, hence
+  # the deliberately low blur gate. The composite score is what really decides.
+  min_laplacian_var: 6.0
+  min_side_px: 32
+  max_overexposed_ratio: 0.45
+  max_underexposed_ratio: 0.70
+  min_colorfulness: 3.0
+  min_score: 0.12
+  move_rejected: true
+
+cluster:
+  type: hdbscan
+  params:
+    min_cluster_size: 3
+    min_samples: 2
+    metric: euclidean
+    cluster_selection_epsilon: 0.0
+    n_clusters: 6
+  reduce_dim: pca
+  pca_components: 16
+  representatives_per_cluster: 8
+  noise_as_unknown: true
+
+split:
+  ratios: {train: 0.8, val: 0.1, test: 0.1}
+  seed: 20240517
+  stratify: true
+  prevent_leakage: true
+  min_images_per_class: 3
+
+export:
+  copy_mode: copy
+  overwrite: true
+  drop_unknown: true
+  min_images_per_class: 3
+  stats_path: data/metadata/class_stats.csv
+
+logging:
+  level: INFO
+  file_level: DEBUG
+  colorize: true

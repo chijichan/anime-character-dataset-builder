@@ -1,0 +1,31 @@
+# Core runtime - CPU only, no model weights downloaded. This is the set that
+# `pip install -r requirements.txt` gives you; it is enough to run the demo
+# configuration end to end.
+numpy>=1.26
+opencv-python>=4.9
+pillow>=10.2
+imagehash>=4.3
+pandas>=2.1
+scikit-learn>=1.4
+scipy>=1.11
+pyyaml>=6.0
+loguru>=0.7
+tqdm>=4.66
+typer>=0.12
+
+# --- Optional backends --------------------------------------------------------
+# Uncomment (or `pip install -e ".[all]"`) to enable the deep-learning paths.
+# The pipeline auto-detects what is installed and falls back to classical CV.
+#
+# ultralytics>=8.1        # YOLOv8 / YOLO11 detectors  (extra: yolo)
+# torch>=2.1              # timm / CLIP feature extractors (extra: torch)
+# torchvision>=0.16
+# timm>=0.9
+# onnxruntime>=1.17       # ONNX Runtime inference backend (extra: onnx)
+# av>=12.0                # PyAV: real I-frame keyframe extraction (extra: video)
+# scenedetect>=0.6.4      # PySceneDetect: scene-cut detection (extra: video)
+#
+# --- Dev ----------------------------------------------------------------------
+# pytest>=8.0
+# pytest-cov>=5.0
+# ruff>=0.5

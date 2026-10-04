@@ -1,0 +1,33 @@
+# ---- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Local scratch (never part of the deliverable) --------------------------
+.tmp/
+
+# ---- Pipeline runtime -------------------------------------------------------
+data/*
+!data/.gitkeep
+!data/input/
+data/input/*
+!data/input/.gitkeep
+logs/
+
+# ---- Models / weights (never commit copyrighted or large binaries) ----------
+models/*
+!models/.gitkeep
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.ckpt
+!scripts/**/*.onnx

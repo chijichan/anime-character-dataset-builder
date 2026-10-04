@@ -1,0 +1,10 @@
+# Keep the repository LF everywhere: the pipeline writes CSV/JSON with "\n" and
+# shell scripts and Python sources should behave the same on every platform.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.mp4 binary
+*.pt binary
+*.onnx binary
