@@ -1,0 +1,66 @@
+{
+  // 解释器：默认用仓库内的 .venv。若你的虚拟环境在别处（或改了名字），
+  // 用 Ctrl+Shift+P -> "Python: Select Interpreter" 选一次即可，
+  // 调试配置里的 ${command:python.interpreterPath} 会自动跟随。
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+
+  // src-layout：让 Pylance 能找到 acdb 包（否则 import 全飘红）
+  "python.analysis.extraPaths": ["src"],
+  "python.analysis.typeCheckingMode": "basic",
+
+  // pytest 集成
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": ["tests"],
+  "python.testing.cwd": "${workspaceFolder}",
+
+  // ruff 作为格式化/lint（见 .vscode/extensions.json 的推荐扩展）
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": false,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+  "ruff.lineLength": 100,
+
+  // 与 .gitattributes / 流水线写出的 CSV 保持一致
+  "files.eol": "\n",
+  "files.encoding": "utf8",
+  "editor.rulers": [100],
+  "editor.tabSize": 4,
+
+  // 生成的中间产物不进搜索/监视，资源管理器里仍然可见
+  "search.exclude": {
+    "**/data/**": true,
+    "**/logs/**": true,
+    "**/.venv/**": true,
+    "**/.tmp/**": true
+  },
+  "files.watcherExclude": {
+    "**/data/**": true,
+    "**/logs/**": true,
+    "**/.venv/**": true
+  },
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "**/*.egg-info": true
+  },
+
+  // 在集成终端里 `python -m acdb ...` 也能直接跑（无需 pip install -e .）
+  "terminal.integrated.env.windows": {
+    "PYTHONPATH": "${workspaceFolder}/src",
+    "PYTHONIOENCODING": "utf-8"
+  },
+  "terminal.integrated.env.linux": {
+    "PYTHONPATH": "${workspaceFolder}/src",
+    "PYTHONIOENCODING": "utf-8"
+  },
+  "terminal.integrated.env.osx": {
+    "PYTHONPATH": "${workspaceFolder}/src",
+    "PYTHONIOENCODING": "utf-8"
+  }
+}

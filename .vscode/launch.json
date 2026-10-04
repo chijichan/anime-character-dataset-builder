@@ -1,0 +1,249 @@
+{
+  // VS Code 调试配置 —— 用 F5 直接跑/调试 acdb 流水线。
+  //
+  // 三个要点（已在每条配置里设好，一般不用改）：
+  //   cwd      = ${workspaceFolder}  —— 配置里的相对路径（configs/、data/）都相对项目根解析
+  //   module   = acdb                —— 等价于命令行 `python -m acdb ...`
+  //   PYTHONPATH = ${workspaceFolder}/src —— 即使没做 `pip install -e .` 也能导入
+  //
+  // 调试整条流水线请用 integratedTerminal：需要交互（人工标注处会停下来问）
+  // 且 tqdm/loguru 的彩色输出只有真终端才正常。
+  "version": "0.2.0",
+
+  "inputs": [
+    {
+      "id": "config",
+      "type": "pickString",
+      "description": "使用哪个配置文件？",
+      "options": ["configs/demo.yaml", "configs/default.yaml"],
+      "default": "configs/demo.yaml"
+    },
+    {
+      "id": "stage",
+      "type": "pickString",
+      "description": "运行哪个阶段？",
+      "options": [
+        "run-all",
+        "extract-frames",
+        "detect",
+        "crop",
+        "dedup",
+        "filter",
+        "cluster",
+        "apply-labels",
+        "split",
+        "export",
+        "status"
+      ],
+      "default": "run-all"
+    }
+  ],
+
+  "configurations": [
+    // ---------------------------------------------------------------- 流水线
+    {
+      "name": "acdb: run-all（demo 配置，离线）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "acdb",
+      "args": ["run-all", "-c", "configs/demo.yaml", "--yes"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "1-流水线", "order": 1 }
+    },
+    {
+      "name": "acdb: run-all --resume（继续上次中断）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "acdb",
+      "args": ["run-all", "-c", "${input:config}", "--resume", "--yes"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "1-流水线", "order": 2 }
+    },
+    {
+      "name": "acdb: run-all（default 配置，需要模型权重）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "acdb",
+      "args": ["run-all", "-c", "configs/default.yaml"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "1-流水线", "order": 3 }
+    },
+    {
+      "name": "acdb: status（看各阶段状态/下一步）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "acdb",
+      "args": ["status", "-c", "${input:config}"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "1-流水线", "order": 4 }
+    },
+
+    // ------------------------------------------------------------ 单个阶段
+    {
+      "name": "acdb: 单阶段（选择阶段 + 配置）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "acdb",
+      "args": ["${input:stage}", "-c", "${input:config}", "--yes"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "2-单阶段", "order": 1 }
+    },
+    {
+      "name": "acdb: 单阶段 --force（忽略状态重跑）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "acdb",
+      "args": ["${input:stage}", "-c", "${input:config}", "--force", "--yes"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "2-单阶段", "order": 2 }
+    },
+    {
+      "name": "acdb: cluster（在聚类/导出评审图处断点）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "acdb",
+      "args": ["cluster", "-c", "configs/demo.yaml", "--force", "--yes"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "2-单阶段", "order": 3 }
+    },
+
+    // ------------------------------------------------------ 演示与校验脚本
+    {
+      "name": "demo: 渲染合成视频（demo-video）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "acdb",
+      "args": ["demo-video", "-o", "data/input", "--force"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "3-演示与校验", "order": 1 }
+    },
+    {
+      "name": "demo: 模拟人工标注（demo-annotate）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "acdb",
+      "args": ["demo-annotate", "-c", "configs/demo.yaml"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "3-演示与校验", "order": 2 }
+    },
+    {
+      "name": "校验: check_output_contract.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${command:python.interpreterPath}",
+      "args": ["scripts/check_output_contract.py", "-c", "${input:config}"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "3-演示与校验", "order": 3 }
+    },
+    {
+      "name": "校验: make_contact_sheet.py（每类样本表）",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${command:python.interpreterPath}",
+      "args": [
+        "scripts/make_contact_sheet.py",
+        "-c", "configs/demo.yaml",
+        "--per-class", "6",
+        "-o", "docs/demo_samples.png"
+      ],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "3-演示与校验", "order": 4 }
+    },
+
+    // ------------------------------------------------------------------ 测试
+    {
+      "name": "pytest: 全部用例",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests", "-v", "--no-header"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": false,
+      "presentation": { "group": "4-测试", "order": 1 }
+    },
+    {
+      "name": "pytest: 全部用例（跳过慢速端到端）",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests", "-v", "-m", "not slow"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": false,
+      "presentation": { "group": "4-测试", "order": 2 }
+    },
+    {
+      "name": "pytest: 当前文件",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["${file}", "-v"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": false,
+      "presentation": { "group": "4-测试", "order": 3 }
+    },
+    {
+      "name": "pytest: 光标所在的测试",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["${file}::${selectedText}", "-v"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": false,
+      "presentation": { "group": "4-测试", "order": 4 }
+    },
+
+    // ------------------------------------------------------------ 任意脚本
+    {
+      "name": "Python: 调试当前文件",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": { "PYTHONPATH": "${workspaceFolder}/src", "PYTHONIOENCODING": "utf-8" },
+      "justMyCode": true,
+      "presentation": { "group": "5-任意脚本", "order": 1 }
+    }
+  ]
+}

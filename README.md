@@ -88,6 +88,30 @@ python scripts/check_output_contract.py -c configs/demo.yaml   # 独立校验输
 
 完整日志与产出统计见 **[docs/demo_run.md](docs/demo_run.md)**。
 
+### 在 VS Code 里运行 / 调试
+
+仓库自带 `.vscode/` 配置，打开文件夹即可按 <kbd>F5</kbd> 选配置运行（`.vscode/launch.json`，16 条）：
+
+| 配置 | 作用 |
+|---|---|
+| `acdb: run-all（demo 配置，离线）` | 零权重跑完整流水线，到人工标注处暂停 |
+| `acdb: run-all --resume（继续上次中断）` | 断点续跑 |
+| `acdb: 单阶段（选择阶段 + 配置）` | F5 时弹出下拉框选阶段与配置文件 |
+| `acdb: cluster（在聚类/导出评审图处断点）` | 想单步跟踪聚类逻辑时用 |
+| `demo: 渲染合成视频 / 模拟人工标注` | 演示用的两个辅助命令 |
+| `校验: check_output_contract.py` | 独立校验输出契约 |
+| `pytest: 全部用例 / 当前文件 / 光标所在测试` | 带断点跑测试 |
+
+另有两个组合任务（<kbd>Ctrl+Shift+P</kbd> → `Tasks: Run Task`）：
+`demo: 完整离线流程`（渲染 → 跑 → 标注 → 导出 → 校验，五步顺序执行）与 `check: ruff + pytest`。
+
+`launch.json` 里已统一设好三件事，所以一般不需要改：`cwd=${workspaceFolder}`（配置里的相对路径都相对项目根解析）、
+`module=acdb`（等价于 `python -m acdb ...`）、`PYTHONPATH=${workspaceFolder}/src`（即使没做 `pip install -e .` 也能导入）。
+需要交互/彩色输出的配置都用 `integratedTerminal`，断点调试请用集成终端而不是调试控制台。
+
+> `settings.json` 默认解释器指向 `./.venv/Scripts/python.exe`；若你的环境在别处，
+> 用 `Python: Select Interpreter` 选一次即可，所有配置会自动跟随。
+
 ---
 
 ## 硬性输出契约
@@ -473,6 +497,7 @@ anime-character-dataset-builder/
 │   ├── make_demo_video.py        # 生成演示视频
 │   ├── make_contact_sheet.py     # 每类样本联络表（人工快速复核）
 │   └── check_output_contract.py  # 独立校验输出契约（可用于 CI）
+├── .vscode/                      # F5 运行/调试配置、任务、推荐扩展
 ├── tests/                        # 87 个 pytest 用例
 ├── docs/demo_run.md              # 演示运行记录（验收证据）
 ├── pyproject.toml / requirements.txt

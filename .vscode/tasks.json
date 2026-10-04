@@ -1,0 +1,91 @@
+{
+  // 任务：Ctrl+Shift+P -> "Tasks: Run Task"
+  // 与 launch.json 的分工：需要断点调试用 F5，需要一条命令跑完一串步骤用任务。
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "demo: 完整离线流程（渲染 → 跑到标注 → 标注 → 导出 → 校验）",
+      "detail": "等价于 docs/demo_run.md 里记录的 5 条命令，全程无需模型权重",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "demo: 1 渲染合成视频",
+        "demo: 2 跑流水线（在人工标注处暂停）",
+        "demo: 3 模拟人工标注",
+        "demo: 4 合并标注并导出",
+        "demo: 5 校验输出契约"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "demo: 1 渲染合成视频",
+      "type": "process",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "acdb", "demo-video", "-o", "data/input", "--force"],
+      "options": { "cwd": "${workspaceFolder}", "env": { "PYTHONPATH": "${workspaceFolder}/src" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "demo: 2 跑流水线（在人工标注处暂停）",
+      "type": "process",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "acdb", "run-all", "-c", "configs/demo.yaml", "--yes"],
+      "options": { "cwd": "${workspaceFolder}", "env": { "PYTHONPATH": "${workspaceFolder}/src" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "demo: 3 模拟人工标注",
+      "type": "process",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "acdb", "demo-annotate", "-c", "configs/demo.yaml"],
+      "options": { "cwd": "${workspaceFolder}", "env": { "PYTHONPATH": "${workspaceFolder}/src" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "demo: 4 合并标注并导出",
+      "type": "process",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "acdb", "run-all", "-c", "configs/demo.yaml", "--resume", "--yes"],
+      "options": { "cwd": "${workspaceFolder}", "env": { "PYTHONPATH": "${workspaceFolder}/src" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "demo: 5 校验输出契约",
+      "type": "process",
+      "command": "${command:python.interpreterPath}",
+      "args": ["scripts/check_output_contract.py", "-c", "configs/demo.yaml"],
+      "options": { "cwd": "${workspaceFolder}", "env": { "PYTHONPATH": "${workspaceFolder}/src" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "check: ruff + pytest",
+      "dependsOrder": "sequence",
+      "dependsOn": ["lint: ruff", "test: pytest"],
+      "problemMatcher": []
+    },
+    {
+      "label": "lint: ruff",
+      "type": "process",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "ruff", "check", "src", "tests", "scripts"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "test: pytest",
+      "type": "process",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "pytest", "tests", "-q"],
+      "options": { "cwd": "${workspaceFolder}", "env": { "PYTHONPATH": "${workspaceFolder}/src" } },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "status: 各阶段状态",
+      "type": "process",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "acdb", "status", "-c", "configs/demo.yaml"],
+      "options": { "cwd": "${workspaceFolder}", "env": { "PYTHONPATH": "${workspaceFolder}/src" } },
+      "problemMatcher": []
+    }
+  ]
+}
