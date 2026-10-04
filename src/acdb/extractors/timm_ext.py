@@ -21,7 +21,20 @@ import numpy as np
 from acdb.errors import ModelUnavailableError
 from acdb.extractors.base import BaseFeatureExtractor
 
-__all__ = ["TimmFeatureExtractor", "prepare_batch"]
+__all__ = ["TimmFeatureExtractor", "prepare_batch", "DOWNLOAD_HINT"]
+
+#: Shown whenever hub weights cannot be fetched. huggingface.co is unreachable
+#: from mainland China (and from some corporate networks); the mirror below
+#: serves the same files and is what most users there need.
+DOWNLOAD_HINT = (
+    "If this is a download failure, either\n"
+    "  * point model_name at weights you already have (local file or directory), or\n"
+    "  * use a HuggingFace mirror -- huggingface.co is not reachable from mainland\n"
+    "    China, hf-mirror.com is the usual stand-in:\n"
+    "        PowerShell:  $env:HF_ENDPOINT = 'https://hf-mirror.com'\n"
+    "        bash:        export HF_ENDPOINT=https://hf-mirror.com\n"
+    "    See README -> Model weights."
+)
 
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)
 _IMAGENET_STD = (0.229, 0.224, 0.225)

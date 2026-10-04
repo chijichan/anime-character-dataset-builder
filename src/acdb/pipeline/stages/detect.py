@@ -215,6 +215,7 @@ class DetectStage(Stage):
             "too_small_area": "detect.filter.min_area_ratio",
             "too_large": "detect.filter.max_side",
             "bad_aspect_ratio": "detect.filter.aspect_ratio",
+            "subtitle_band": "detect.filter.ignore_bottom_frac (lower it or set 0 to disable)",
             "over_max_per_frame": "detect.filter.max_per_frame",
         }
         ranked = sorted(reasons.items(), key=lambda item: -item[1])

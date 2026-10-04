@@ -1,0 +1,44 @@
+# =============================================================================
+# 「别当欧尼酱了！」第一季第十二集 —— 真实素材的第一遍（无模型权重基线）
+# -----------------------------------------------------------------------------
+# 继承 configs/demo.yaml（无权重检测器 + 颜色直方图特征 + HDBSCAN/KMeans），
+# 只覆盖「和演示不一样」的那几项。把设置落成文件的好处：
+#   * 续跑不用再抄一长串 --set（参数变了会导致整段重跑）；
+#   * 每条命令都能简写成 -c configs/onimai.yaml。
+#
+# 用法：
+#   acdb run-all -c configs/onimai.yaml --yes            # 跑到人工标注处暂停
+#   # 编辑 data/onimai/clusters/cluster_labels.yaml
+#   acdb run-all -c configs/onimai.yaml --resume --yes   # 继续 → 导出数据集
+# =============================================================================
+base: demo.yaml
+
+paths:
+  # 指向剧集所在目录（中文路径 OK，OpenCV 5 实测能直接打开）
+  input_dir: data/input/别当欧尼酱了
+  # 独立的产物目录树：frames/ crops/ rejected/ dataset/ metadata/ clusters/
+  work_dir: data/onimai
+
+extract_frames:
+  # 23.7 分钟一集：每 2 秒一个候选点 → 约 710 个候选，再均匀采样到 200 帧
+  interval_seconds: 2.0
+  max_frames_per_video: 200
+
+detect:
+  filter:
+    # 内嵌字幕极其「显著」，容易被当成目标；丢掉画面底部 18% 的框。
+    # 判定看框中心，所以「人站着、脚伸进字幕区」的大框不会被误删。
+    ignore_bottom_frac: 0.18
+
+cluster:
+  # 真实画面的颜色直方图特征比较散，HDBSCAN 只肯给 3 个大簇（没用）；
+  # 第一遍用 KMeans 指定 16 簇，人工核对的工作量可控。
+  # 等换成动漫角色权重 + timm/CLIP 特征后，再回到 hdbscan 更合适。
+  type: kmeans
+  params:
+    n_clusters: 16
+  reduce_dim: pca
+  pca_components: 32
+
+export:
+  min_images_per_class: 2

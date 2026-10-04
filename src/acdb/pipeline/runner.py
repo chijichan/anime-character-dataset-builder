@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Mapping, Optional, Sequence
 
 from acdb.config import AppConfig
 from acdb.errors import StageError
@@ -127,34 +127,40 @@ def write_resolved_config(cfg: AppConfig) -> Path:
 
 
 def _warn_on_config_switch(cfg: AppConfig) -> None:
-    """Warn when a *different* config file reuses the same output directory.
+    """Warn when a *different effective configuration* reuses an output directory.
 
-    Two configs pointing at the same ``paths.metadata_dir`` overwrite each
-    other's tables and state (the demo and default configs both use ``data/``
-    out of the box). That is legal - you may be switching on purpose - but it is
-    worth saying out loud, because the symptom otherwise appears much later as a
-    confusing "parameters changed" or "no detection" failure.
+    Two runs pointing at the same ``paths.metadata_dir`` overwrite each other's
+    tables and state. The comparison is on the **resolved** configuration, not on
+    the file name, so moving the same settings into a dedicated config file (or
+    running the same values from the CLI) stays silent - only a real change
+    speaks up, and it names the sections that differ.
     """
     import yaml
 
     resolved = cfg.paths.metadata_dir / "config_resolved.yaml"
-    if not resolved.is_file() or cfg.source_path is None:
+    if not resolved.is_file():
         return
     try:
         previous = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError):  # pragma: no cover - defensive
         return
-    previous_source = str(previous.get("source_config", ""))
-    if not previous_source or Path(previous_source) == cfg.source_path:
+    before = previous.get("resolved")
+    if not isinstance(before, Mapping):
+        return
+
+    current = cfg.to_dict()
+    changed = sorted(
+        key
+        for key in set(before) | set(current)
+        if key not in {"source_path", "root"} and before.get(key) != current.get(key)
+    )
+    if not changed:
         return
     get_logger("runner").warning(
-        f"{cfg.paths.metadata_dir} was last used with a different configuration:\n"
-        f"    previous: {previous_source}\n"
-        f"    now:      {cfg.source_path}\n"
-        f"  Both write into the same directory, so this run will overwrite the previous\n"
-        f"  artefacts. To keep them apart, give one of them its own paths, e.g.\n"
-        f"    --set paths.metadata_dir=data/demo/metadata --set paths.frames_dir=data/demo/frames\n"
-        f"    --set paths.crops_dir=data/demo/crops --set paths.dataset_dir=data/demo/dataset"
+        f"{cfg.paths.metadata_dir} was last used with a different configuration "
+        f"(changed sections: {', '.join(changed)}).\n"
+        f"  This run will overwrite the artefacts in that directory. To keep them apart,\n"
+        f"  give this run its own tree:  --set paths.work_dir=data/<name>"
     )
 
 

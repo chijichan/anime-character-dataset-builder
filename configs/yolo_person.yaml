@@ -1,0 +1,62 @@
+# =============================================================================
+# 只要 YOLO 把「可能是人体」的框找出来 —— 最小配置
+# -----------------------------------------------------------------------------
+# 目标：用 COCO 的 yolov8n 在原盘动画里找人物候选框，尽量不漏（宁可多留几个假框）。
+#
+# 关键就是三个数：
+#   detect.params.conf_threshold   0.35 → 0.15   低阈值，0.2 左右的「疑似人体」也留下
+#   detect.filter.min_conf         0.35 → 0.15   过滤器别再把它们丢掉
+#   detect.filter.min_side         48   → 32     远景小人也要
+#
+# 实测（本集 1920x1080、23.976fps、237 分钟… 实为 23.7 分钟）：
+#   抽 7 帧 @640 推理，3 帧有框共 8 个，置信度 0.90 / 0.74 / 0.50 / 0.50 / 0.21 / 0.18 / 0.16 / 0.10
+#   → 默认 0.35 阈值只能留下 2 个；0.15 能留下 7 个，其中 0.21 那张确实是人物特写。
+#   → 0.18 那个框在公交车窗上是误检，属正常代价。
+#
+# 用法（只到裁剪，得到可直接翻看的图片）：
+#   acdb run-all -c configs/yolo_person.yaml --to crop --yes
+# 之后：
+#   data/yolo_person/crops/<video_id>/*.jpg     每一张 = 一个疑似人体框
+#   data/yolo_person/metadata/detections.csv    原始框坐标 + 置信度 + 来源帧
+# =============================================================================
+base: default.yaml
+
+paths:
+  input_dir: data/input/别当欧尼酱了
+  # 独立目录树，不动之前 demo / onimai 的产物
+  work_dir: data/yolo_person
+
+extract_frames:
+  strategies: [interval]        # 只要均匀采样；scene 会把整集解码两遍
+  interval_seconds: 2.0
+  max_frames_per_video: 150     # 先 150 帧看效果，正式跑设 null（不限制）
+  jpeg_quality: 95
+
+detect:
+  type: yolo_v8
+  batch_size: 8
+  params:
+    weights: yolov8n.pt         # 仓库根目录已存在；换成动漫专用权重效果更好
+    conf_threshold: 0.15        # ← 关键：低阈值
+    iou_threshold: 0.5
+    imgsz: 640                  # 远景小人漏得多就调到 960（更慢）
+    classes: [0]                # COCO 里 0 = person
+    class_names: [person]
+    max_detections: 30
+    device: cpu                 # 有 CUDA 改成 cuda
+  filter:
+    min_conf: 0.15              # ← 与上面保持一致，别在过滤器里再砍掉
+    min_side: 32                # ← 远景小人
+    max_side: null
+    aspect_ratio: [0.15, 5.0]   # 人形通常是瘦高，这个范围很宽松
+    min_area_ratio: 0.0005
+    max_per_frame: 12
+    nms_across_frames: false
+    ignore_bottom_frac: 0.16    # 内嵌字幕带，别把字幕当人
+
+crop:
+  expand_ratio: 1.25
+  square: true
+  keep_background: true
+  min_output_side: 24
+  jpeg_quality: 95

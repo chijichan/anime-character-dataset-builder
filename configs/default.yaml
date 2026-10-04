@@ -98,6 +98,9 @@ detect:
     min_area_ratio: 0.0015         # bbox area / frame area
     max_per_frame: 10              # keep the N highest-confidence boxes
     nms_across_frames: false       # collapse near-identical boxes frame to frame
+    # Burned-in subtitles are very salient; drop boxes centred in the bottom 18%
+    # of the frame. Set 0.0 to disable (e.g. for clean, subtitle-free masters).
+    ignore_bottom_frac: 0.0
 
 # --- Stage 3: crop -----------------------------------------------------------
 crop:

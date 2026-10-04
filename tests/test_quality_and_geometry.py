@@ -228,3 +228,19 @@ def test_box_iou() -> None:
     assert box_iou((0, 0, 10, 10), (0, 0, 10, 10)) == pytest.approx(1.0)
     assert box_iou((0, 0, 10, 10), (20, 20, 30, 30)) == 0.0
     assert box_iou((0, 0, 10, 10), (5, 0, 15, 10)) == pytest.approx(1 / 3)
+
+
+def test_filter_detections_can_drop_the_subtitle_band() -> None:
+    """Burned-in subtitles sit at the bottom; characters may overlap that band."""
+    cfg = DetectFilterConfig(min_conf=0.0, min_side=1, aspect_ratio=(0.01, 100.0),
+                             min_area_ratio=0.0, max_per_frame=10, ignore_bottom_frac=0.2)
+    subtitle = _detection(100, 940, 800, 990)      # centred at y=965 of 1000 -> dropped
+    character = _detection(200, 100, 700, 980)     # centred at y=540 -> kept
+    kept, rejected = filter_detections([subtitle, character], cfg, (1000, 1000))
+    assert [box.bbox for box in kept] == [(200, 100, 700, 980)]
+    assert rejected == {"subtitle_band": 1}
+
+    # Disabled by default: nothing is dropped for the wrong reason.
+    permissive = DetectFilterConfig(min_conf=0.0, min_side=1, aspect_ratio=(0.01, 100.0),
+                                    min_area_ratio=0.0)
+    assert len(filter_detections([subtitle], permissive, (1000, 1000)).kept) == 1

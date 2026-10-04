@@ -271,7 +271,7 @@ features:
 | `naming` | 三个命名模板、slug 长度、hash 长度 |
 | `video` | 扩展名、是否递归、是否跳过隐藏文件 |
 | `extract_frames` | `strategies`、`interval_seconds/frames`、`scene_threshold`、`keyframe_backend`、`max_frames_per_video`、`skip_static` |
-| `detect` | `type`、`batch_size`、`params`（模型相关）、`filter`（置信度/最小边/宽高比/面积比/每帧上限/跨帧 NMS） |
+| `detect` | `type`、`batch_size`、`params`（模型相关）、`filter`（置信度/最小边/宽高比/面积比/每帧上限/跨帧 NMS/**底部字幕带** `ignore_bottom_frac`） |
 | `crop` | `expand_ratio`、`square`、`keep_background`、`pad_mode`、`output_size` |
 | `dedup` | `phash_hamming`、`cosine_threshold`、`keep`、`same_video_only`、`max_group_size` |
 | `features` | `type`、`normalize`、`batch_size`、`params` |
@@ -563,7 +563,19 @@ acdb run-all -c configs/default.yaml \
 你的每个角色只出自一个视频。看 `split.leakage_fallback`（默认 `image` 会降级分配并告警）；要严格防泄漏就准备同一角色出现在多个视频里的素材。
 
 **Q: Windows 上路径含中文/日文读不出图。**
-图像读写已走 `numpy.fromfile + cv2.imdecode`（支持任意路径）；视频解码受 OpenCV 限制，**建议视频路径为 ASCII**，非 ASCII 时请先重命名或用 `--set paths.input_dir` 指向纯 ASCII 目录。
+图像读写已走 `numpy.fromfile + cv2.imdecode`，任意路径都能读。视频解码实测 **OpenCV 5.0 可以直接打开中文路径**；
+若你用的 OpenCV 4.x 打不开，把视频目录/文件名改成 ASCII 即可（例如 `--set paths.input_dir=D:/anime`），
+流水线其余部分不受影响。
+
+**Q: 有内嵌字幕，裁出来一堆字幕框。**
+内嵌字幕对比度高、非常“显著”，任何检测器都容易把它当成目标。用 `detect.filter.ignore_bottom_frac` 丢掉画面底部
+那条带（默认 `0.0` 关闭，有字幕的番剧建议 `0.18`）：
+
+```bash
+acdb run-all -c configs/demo.yaml --set detect.filter.ignore_bottom_frac=0.18 ...
+```
+
+判定依据是**框的中心**落在底部带内，所以“人站着、脚伸进字幕区”这种大框不会被误删。
 
 **Q: 想只跑一小部分试试。**
 `--set project.max_videos=1 --set extract_frames.max_frames_per_video=20`。

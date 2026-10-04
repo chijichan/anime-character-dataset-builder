@@ -21,6 +21,7 @@ _REASONS = (
     "too_large",
     "bad_aspect_ratio",
     "too_small_area",
+    "subtitle_band",
     "over_max_per_frame",
 )
 
@@ -85,6 +86,11 @@ def filter_detections(
         if box.area / frame_area < config.min_area_ratio:
             rejected["too_small_area"] += 1
             continue
+        if config.ignore_bottom_frac > 0:
+            band_top = (1.0 - min(0.9, config.ignore_bottom_frac)) * height
+            if (y1 + y2) / 2 >= band_top:
+                rejected["subtitle_band"] += 1
+                continue
         kept.append(box)
 
     kept.sort(key=lambda d: (-d.confidence, d.bbox))

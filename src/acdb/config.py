@@ -131,6 +131,11 @@ class DetectFilterConfig:
     min_area_ratio: float = 0.0015
     max_per_frame: int = 10
     nms_across_frames: bool = False
+    #: Drop boxes whose centre falls in the bottom N of the frame. Burned-in
+    #: subtitles are high-contrast and very salient, so a character detector
+    #: (or the classical one) loves to propose them; 0.18 is a good default for
+    #: subtitled anime, 0.0 disables the rule.
+    ignore_bottom_frac: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -567,6 +572,11 @@ def _validate(cfg: AppConfig) -> AppConfig:
         problems.append(f"crop.expand_ratio must be >= 1.0, got {cfg.crop.expand_ratio}")
     if cfg.crop.pad_mode not in _VALID_PAD:
         problems.append(f"crop.pad_mode: {cfg.crop.pad_mode!r} is not one of {sorted(_VALID_PAD)}")
+    if not 0.0 <= cfg.detect.filter.ignore_bottom_frac < 1.0:
+        problems.append(
+            "detect.filter.ignore_bottom_frac must be within [0, 1), got "
+            f"{cfg.detect.filter.ignore_bottom_frac}"
+        )
 
     max_bits = cfg.dedup.phash_size * cfg.dedup.phash_size
     if not 0 <= cfg.dedup.phash_hamming <= max_bits:
