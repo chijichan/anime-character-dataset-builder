@@ -50,6 +50,7 @@ class DetectStage(Stage):
         ctx.info(f"detector: {detector.describe()} on {describe_device(device)}")
 
         processed = filtered = produced = 0
+        raw_boxes = 0
         items: List[str] = []
         reasons: Dict[str, int] = {}
         previous: Dict[str, List[Tuple[int, Detection]]] = {}
@@ -66,23 +67,30 @@ class DetectStage(Stage):
                         continue
                     batch.append((record, image))
                     if len(batch) >= max(1, cfg.detect.batch_size):
-                        processed, filtered, produced = self._flush(
+                        processed, filtered, produced, raw = self._flush(
                             ctx, detector, batch, rows, reasons, previous,
                             processed, filtered, produced, items,
                         )
+                        raw_boxes += raw
                         batch = []
                 if batch:
-                    processed, filtered, produced = self._flush(
+                    processed, filtered, produced, raw = self._flush(
                         ctx, detector, batch, rows, reasons, previous,
                         processed, filtered, produced, items,
                     )
+                    raw_boxes += raw
         finally:
             detector.close()
 
         if not rows:
             raise StageError(
-                "no detection survived the filters. Loosen detect.filter "
-                "(min_conf / min_side / min_area_ratio) or check your weights."
+                self._no_detection_message(
+                    type_name=cfg.detect.type,
+                    frames=len(frames),
+                    raw_boxes=raw_boxes,
+                    reasons=reasons,
+                    settings=cfg.detect,
+                )
             )
 
         frame = pd.DataFrame(rows)
@@ -97,6 +105,7 @@ class DetectStage(Stage):
         extra = {
             "detector": cfg.detect.type,
             "device": device,
+            "raw_boxes": raw_boxes,
             "empty_frames": empty_frames,
         }
         if reasons:
@@ -123,11 +132,14 @@ class DetectStage(Stage):
         filtered: int,
         produced: int,
         items: List[str],
-    ) -> Tuple[int, int, int]:
+    ) -> Tuple[int, int, int, int]:
+        """Process one batch; returns ``(processed, filtered, produced, raw_boxes)``."""
         frames = [image for _record, image in batch]
         results = detector.detect_batch(frames)
+        raw_boxes = 0
         for (record, image), detections in zip(batch, results):
             frame_id = str(record["frame_id"])
+            raw_boxes += len(detections)
             keep, rejected = filter_detections(
                 detections, ctx.cfg.detect.filter, image.shape[:2]
             )
@@ -169,7 +181,53 @@ class DetectStage(Stage):
             produced += len(keep)
             items.append(frame_id)
             ctx.mark_processed(frame_id)
-        return processed, filtered, produced
+        return processed, filtered, produced, raw_boxes
+
+    @staticmethod
+    def _no_detection_message(
+        *,
+        type_name: str,
+        frames: int,
+        raw_boxes: int,
+        reasons: Dict[str, int],
+        settings,
+    ) -> str:
+        """Explain *why* nothing survived, instead of blaming the filters blindly."""
+        header = f"the detector produced no usable box over {frames} frame(s)."
+        if raw_boxes == 0:
+            return "\n".join(
+                [
+                    header,
+                    f"  {type_name} returned 0 raw box(es), so this is not a filtering problem:",
+                    "  the weights do not recognise anything in this footage.",
+                    "  - COCO checkpoints (yolov8n.pt / yolo11n.pt) only detect 'person' and find",
+                    "    nothing in flat-shaded / stylised anime frames;",
+                    "  - for the offline demo footage use:  acdb run-all -c configs/demo.yaml",
+                    "  - for real anime use an anime character checkpoint:",
+                    "      detect.type: anime_yolo",
+                    "      detect.params.weights: models/<your-checkpoint>.pt",
+                    "    (see README -> Model weights)",
+                ]
+            )
+        suggestions = {
+            "below_min_conf": "detect.params.conf_threshold / detect.filter.min_conf",
+            "too_small": "detect.filter.min_side",
+            "too_small_area": "detect.filter.min_area_ratio",
+            "too_large": "detect.filter.max_side",
+            "bad_aspect_ratio": "detect.filter.aspect_ratio",
+            "over_max_per_frame": "detect.filter.max_per_frame",
+        }
+        ranked = sorted(reasons.items(), key=lambda item: -item[1])
+        lines = [header, f"  {raw_boxes} raw box(es) were rejected: {dict(ranked)}"]
+        for reason, _count in ranked[:2]:
+            setting = suggestions.get(reason)
+            if setting:
+                lines.append(f"  - mostly '{reason}': relax {setting}")
+        lines.append(
+            "  (also worth checking: detect.params.classes / class_names against the "
+            "checkpoint's own class list)"
+        )
+        return "\n".join(lines)
 
 
 def _suppress_unchanged(

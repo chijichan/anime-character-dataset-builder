@@ -18,6 +18,7 @@ pointers).
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, List, Mapping, Sequence
 
@@ -25,6 +26,13 @@ import numpy as np
 
 from acdb.detectors.base import BaseDetector, Detection
 from acdb.errors import ModelUnavailableError, StageError
+
+# Ultralytics imports matplotlib for its plotting helpers, which in an
+# interactive session prints "Backend tkagg is interactive backend. Turning
+# interactive mode on." and can open windows. This pipeline never plots, so ask
+# matplotlib for the non-interactive backend *before* ultralytics is imported.
+# setdefault() keeps an explicit user choice intact.
+os.environ.setdefault("MPLBACKEND", "Agg")
 
 __all__ = ["YoloDetector"]
 
@@ -93,20 +101,21 @@ class YoloDetector(BaseDetector):
     def detect_batch(self, images: Sequence[np.ndarray]) -> Sequence[Sequence[Detection]]:
         if not images:
             return []
+        kwargs = {
+            "source": list(images),
+            "conf": self.conf,
+            "iou": self.iou,
+            "imgsz": self.imgsz,
+            "max_det": self.max_det,
+            "classes": self.classes,
+            "device": self.device,
+            "agnostic_nms": self.agnostic_nms,
+            "retina_masks": self.retina_masks,
+            "verbose": False,
+        }
+        kwargs.update(self._precision_kwargs())
         try:  # pragma: no cover - optional dependency
-            results = self._model.predict(
-                source=list(images),
-                conf=self.conf,
-                iou=self.iou,
-                imgsz=self.imgsz,
-                max_det=self.max_det,
-                classes=self.classes,
-                device=self.device,
-                half=self.half,
-                agnostic_nms=self.agnostic_nms,
-                retina_masks=self.retina_masks,
-                verbose=False,
-            )
+            results = self._model.predict(**kwargs)
         except Exception as exc:  # pragma: no cover - runtime/backend errors
             raise StageError(f"{self.alias} inference failed: {exc}") from exc
 
@@ -114,6 +123,23 @@ class YoloDetector(BaseDetector):
         for result in results:
             batch.append(self._parse_result(result))
         return batch
+
+    def _precision_kwargs(self) -> Mapping[str, Any]:
+        """The fp16 switch, spelled the way this ultralytics version expects.
+
+        ultralytics >= 8.4 replaced ``half``/``int8`` with a unified
+        ``quantize`` argument and warns about the legacy ones on every call.
+        We therefore omit the argument entirely for fp32 (its default) and only
+        pass fp16 in the spelling the installed version understands.
+        """
+        if not self.half:
+            return {}
+        try:
+            from ultralytics.cfg import QUANTIZE_ALIASES  # noqa: F401
+
+            return {"quantize": 16}  # 16 == fp16 in the unified scheme
+        except ImportError:  # pragma: no cover - older ultralytics
+            return {"half": True}
 
     # -- parsing ----------------------------------------------------------- #
     def _class_name(self, class_id: int) -> str:

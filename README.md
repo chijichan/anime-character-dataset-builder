@@ -506,8 +506,22 @@ anime-character-dataset-builder/
 
 ## 常见问题
 
-**Q: `acdb detect` 报「no detection survived the filters」。**
-权重类别不对（COCO 权重只会在 `classes: [0]` 上找人），或过滤太严。先放宽 `detect.params.conf_threshold` 与 `detect.filter.min_side/min_area_ratio`，或用 `--set detect.type=saliency` 验证链路本身是否通。
+**Q: `acdb detect` 报「the detector produced no usable box」。**
+报错会先告诉你**是哪一类问题**，别急着调阈值：
+
+* 若写的是 `返回 0 个原始框` —— 那是权重不认这批画面，调过滤器永远没用。COCO 权重（`yolov8n.pt`/`yolo11n.pt`）只检测 `person`，对平涂风格的动画帧基本一无所获；跑演示素材请用 `-c configs/demo.yaml`，跑真实动画请换动漫角色权重（`detect.type: anime_yolo` + `detect.params.weights`）。
+* 若写的是 `N 个原始框被过滤` —— 那才是阈值问题，报错会指出占比最高的原因并点名该改哪一项（`below_min_conf` → `detect.params.conf_threshold`/`detect.filter.min_conf`，`too_small` → `min_side`，…）。
+
+**Q: 我切了配置文件，之前的产出被覆盖了。**
+`configs/demo.yaml` 与 `configs/default.yaml` 默认都写 `data/`。用不同配置跑同一个输出目录时，运行开始会打印一条 WARNING 提示「上次用的是另一个配置」，但不会阻止你（可能你就是故意的）。想把两套产物分开，给其中一套单独指路即可：
+
+```bash
+acdb run-all -c configs/default.yaml \
+  --set paths.metadata_dir=data/real/metadata \
+  --set paths.frames_dir=data/real/frames \
+  --set paths.crops_dir=data/real/crops \
+  --set paths.dataset_dir=data/real/dataset
+```
 
 **Q: `acdb export` 报「nothing left to export」。**
 所有簇仍是 `unknown`。编辑 `data/clusters/cluster_labels.yaml`（或重命名核对文件夹）后重跑 `apply-labels → split → export`。

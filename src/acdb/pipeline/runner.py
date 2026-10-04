@@ -126,6 +126,38 @@ def write_resolved_config(cfg: AppConfig) -> Path:
     return write_text_atomic(target, text)
 
 
+def _warn_on_config_switch(cfg: AppConfig) -> None:
+    """Warn when a *different* config file reuses the same output directory.
+
+    Two configs pointing at the same ``paths.metadata_dir`` overwrite each
+    other's tables and state (the demo and default configs both use ``data/``
+    out of the box). That is legal - you may be switching on purpose - but it is
+    worth saying out loud, because the symptom otherwise appears much later as a
+    confusing "parameters changed" or "no detection" failure.
+    """
+    import yaml
+
+    resolved = cfg.paths.metadata_dir / "config_resolved.yaml"
+    if not resolved.is_file() or cfg.source_path is None:
+        return
+    try:
+        previous = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):  # pragma: no cover - defensive
+        return
+    previous_source = str(previous.get("source_config", ""))
+    if not previous_source or Path(previous_source) == cfg.source_path:
+        return
+    get_logger("runner").warning(
+        f"{cfg.paths.metadata_dir} was last used with a different configuration:\n"
+        f"    previous: {previous_source}\n"
+        f"    now:      {cfg.source_path}\n"
+        f"  Both write into the same directory, so this run will overwrite the previous\n"
+        f"  artefacts. To keep them apart, give one of them its own paths, e.g.\n"
+        f"    --set paths.metadata_dir=data/demo/metadata --set paths.frames_dir=data/demo/frames\n"
+        f"    --set paths.crops_dir=data/demo/crops --set paths.dataset_dir=data/demo/dataset"
+    )
+
+
 def run_pipeline(
     cfg: AppConfig,
     *,
@@ -147,6 +179,7 @@ def run_pipeline(
     cfg.ensure_dirs()
     store = StateStore(cfg.paths.state_dir())
     if not dry_run:
+        _warn_on_config_switch(cfg)
         write_resolved_config(cfg)
 
     selected = build_stages(stages)
