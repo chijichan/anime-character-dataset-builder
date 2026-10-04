@@ -24,14 +24,12 @@ project:
   max_videos: null
 
 paths:
+  # Only the two knobs that matter here: where the footage is and where the work
+  # tree goes. Every other directory is derived from work_dir, so
+  #   acdb run-all -c configs/demo.yaml --set paths.work_dir=data/mine
+  # keeps a run fully separate from the default data/ tree.
   input_dir: data/input
   work_dir: data
-  frames_dir: data/frames
-  crops_dir: data/crops
-  rejected_dir: data/rejected
-  dataset_dir: data/dataset
-  metadata_dir: data/metadata
-  clusters_dir: data/clusters
   logs_dir: logs
 
 extract_frames:
@@ -122,7 +120,6 @@ export:
   overwrite: true
   drop_unknown: true
   min_images_per_class: 3
-  stats_path: data/metadata/class_stats.csv
 
 logging:
   level: INFO

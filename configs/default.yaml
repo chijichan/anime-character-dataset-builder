@@ -22,14 +22,20 @@ project:
 
 paths:
   input_dir: data/input            # your video files live here (nested is fine)
-  work_dir: data                   # parent of the intermediate artefact dirs
-  frames_dir: data/frames          # extract-frames output (raw frames)
-  crops_dir: data/crops            # crop output (one file per detection)
-  rejected_dir: data/rejected      # crops dropped by `filter`, kept for review
-  dataset_dir: data/dataset        # final ImageFolder dataset
-  metadata_dir: data/metadata      # all CSV/JSON bookkeeping + .state/
-  clusters_dir: data/clusters      # per-cluster review folders for humans
+  # Root of the work tree. Every directory below is derived from it *unless*
+  # written out explicitly, so `--set paths.work_dir=data/my_show` relocates a
+  # whole run in one go. Derived: frames/ crops/ rejected/ dataset/ metadata/
+  # clusters/. logs_dir is deliberately kept outside (logs are not artefacts).
+  work_dir: data
   logs_dir: logs
+
+  # Uncomment any of these to place one directory somewhere else (explicit wins):
+  # frames_dir: data/frames        # extract-frames output (raw frames)
+  # crops_dir: data/crops          # crop output (one file per detection)
+  # rejected_dir: data/rejected    # crops dropped by `filter`, kept for review
+  # dataset_dir: data/dataset      # final ImageFolder dataset
+  # metadata_dir: data/metadata    # all CSV/JSON bookkeeping + .state/
+  # clusters_dir: data/clusters    # per-cluster review folders for humans
 
 # --- File naming contract ----------------------------------------------------
 # These templates ARE the hard output contract. Change them only if you also
@@ -192,7 +198,9 @@ export:
   overwrite: false
   drop_unknown: true               # keep unknown/ out of the final dataset
   min_images_per_class: 1
-  stats_path: data/metadata/class_stats.csv
+  # stats_path is derived as <paths.metadata_dir>/class_stats.csv; uncomment to
+  # put the per-class table somewhere else:
+  # stats_path: data/metadata/class_stats.csv
 
 logging:
   level: INFO                      # console

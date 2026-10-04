@@ -45,6 +45,7 @@ __all__ = [
     "load_config",
     "apply_overrides",
     "deep_merge",
+    "derive_work_dir",
     "hash_mapping",
 ]
 
@@ -474,6 +475,59 @@ def hash_mapping(mapping: Mapping[str, Any], length: int = 16) -> str:
     return hashlib.blake2b(payload.encode("utf-8"), digest_size=32).hexdigest()[:length]
 
 
+#: Sub-directories of ``paths.work_dir`` (key -> directory name).
+_WORK_DIR_CHILDREN: Mapping[str, str] = {
+    "frames_dir": "frames",
+    "crops_dir": "crops",
+    "rejected_dir": "rejected",
+    "dataset_dir": "dataset",
+    "metadata_dir": "metadata",
+    "clusters_dir": "clusters",
+}
+
+
+def derive_work_dir(raw: Mapping[str, Any]) -> Dict[str, Any]:
+    """Expand ``paths.work_dir`` into the artefact directories below it.
+
+    Rule: **a path that is written out explicitly wins; everything else follows
+    ``work_dir``.** So one override relocates the whole work tree::
+
+        acdb run-all -c configs/demo.yaml --set paths.work_dir=data/my_show
+
+    puts frames/crops/dataset/metadata/clusters under ``data/my_show/`` (and
+    points ``export.stats_path`` at its metadata directory), while
+    ``paths.logs_dir`` deliberately stays outside: logs are not a dataset
+    artefact. Configurations that list every directory explicitly - as
+    ``configs/default.yaml`` does for reference - are left untouched.
+    """
+    paths = raw.get("paths")
+    if not isinstance(paths, Mapping) or "work_dir" not in paths:
+        return dict(raw)
+
+    base = Path(str(paths["work_dir"]))
+    # POSIX separators keep the raw mapping identical across platforms, which
+    # matters because it feeds the state signature hash.
+    derived = {
+        key: (base / name).as_posix()
+        for key, name in _WORK_DIR_CHILDREN.items()
+        if key not in paths
+    }
+    if not derived:
+        return dict(raw)
+
+    out: Dict[str, Any] = dict(raw)
+    out["paths"] = {**paths, **derived}
+
+    export = dict(out.get("export") or {})
+    if "stats_path" not in export:
+        metadata_dir = out["paths"].get("metadata_dir")
+        if metadata_dir:
+            export["stats_path"] = (Path(str(metadata_dir)) / "class_stats.csv").as_posix()
+    if export:
+        out["export"] = export
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Validation
 # --------------------------------------------------------------------------- #
@@ -600,6 +654,7 @@ def load_config(
 
     raw = _load_with_base(config_path)
     raw = apply_overrides(raw, overrides)
+    raw = derive_work_dir(raw)
 
     cfg: AppConfig = _build(AppConfig, raw, "config")
     cfg = dataclasses.replace(cfg, source_path=config_path.resolve(), root=project_root, raw=raw)

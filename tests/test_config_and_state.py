@@ -84,6 +84,42 @@ def test_deep_merge_and_hash_mapping() -> None:
     assert hash_mapping({"a": 1}) != hash_mapping({"a": 2})
 
 
+def test_work_dir_relocates_the_whole_work_tree(configs_dir: Path, tmp_path: Path) -> None:
+    """One override must be enough to keep two runs apart."""
+    cfg = load_config(
+        configs_dir / "demo.yaml",
+        root=tmp_path,
+        overrides=["paths.work_dir=data/my_show"],
+    )
+    assert cfg.paths.work_dir == tmp_path / "data" / "my_show"
+    for directory in cfg.paths.output_dirs():
+        if directory == cfg.paths.logs_dir:
+            continue
+        assert cfg.paths.work_dir in directory.parents or directory == cfg.paths.work_dir, (
+            f"{directory} did not follow paths.work_dir"
+        )
+    assert cfg.export.stats_path == cfg.paths.metadata_dir / "class_stats.csv"
+    assert cfg.paths.logs_dir == tmp_path / "logs", "logs stay outside the work tree"
+    assert cfg.paths.input_dir == tmp_path / "data" / "input", "input_dir is not relocated"
+
+
+def test_work_dir_derivation_respects_explicit_paths(tmp_path: Path) -> None:
+    from acdb.config import derive_work_dir
+
+    raw = {
+        "paths": {"work_dir": "work", "crops_dir": "elsewhere/crops"},
+        "export": {"overwrite": True},
+    }
+    derived = derive_work_dir(raw)
+    assert derived["paths"]["crops_dir"] == "elsewhere/crops"       # explicit wins
+    assert derived["paths"]["frames_dir"] == "work/frames"
+    assert derived["paths"]["metadata_dir"] == "work/metadata"
+    assert derived["export"]["stats_path"] == "work/metadata/class_stats.csv"
+    assert derived["export"]["overwrite"] is True                    # untouched
+
+    assert derive_work_dir({"paths": {"input_dir": "x"}}) == {"paths": {"input_dir": "x"}}
+
+
 # --------------------------------------------------------------------------- #
 # Stage state
 # --------------------------------------------------------------------------- #

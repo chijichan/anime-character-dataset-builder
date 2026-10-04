@@ -88,6 +88,39 @@ python scripts/check_output_contract.py -c configs/demo.yaml   # 独立校验输
 
 完整日志与产出统计见 **[docs/demo_run.md](docs/demo_run.md)**。
 
+### 换成你自己的素材
+
+`paths.work_dir` 是工作目录树的根：**写出来的路径优先，其余全部由它派生**（frames / crops / rejected / dataset / metadata / clusters；logs 不进工作树）。所以把一条命令的输入和产出都挪走只需要两个 `--set`，既不用改配置文件，也不会覆盖之前跑出来的数据集：
+
+```bash
+# 自己的素材，先跑通流程（无权重基线：显著性检测 + 颜色直方图特征）
+acdb run-all -c configs/demo.yaml \
+  --set paths.input_dir=D:/anime/episodes \
+  --set paths.work_dir=data/my_show
+
+# 跑到人工标注处会暂停：编辑 data/my_show/clusters/cluster_labels.yaml
+# （或把 cluster_003/ 重命名为 cluster_003__作品__角色/），然后继续
+acdb run-all -c configs/demo.yaml \
+  --set paths.input_dir=D:/anime/episodes \
+  --set paths.work_dir=data/my_show --resume
+```
+
+跑真实素材时通常还要调三个数：`extract_frames.max_frames_per_video`（先设小值快速看效果，正式跑设为 `null`）、
+`detect.filter.min_conf`、`quality.min_score`。
+
+想要最好效果就换动漫角色权重（见 [模型权重获取](#模型权重获取)）：
+
+```bash
+acdb run-all -c configs/default.yaml \
+  --set detect.type=anime_yolo --set detect.params.weights=models/anime_char.pt \
+  --set features.type=timm --set features.params.model_name=resnet18 \
+  --set paths.input_dir=D:/anime/episodes --set paths.work_dir=data/my_show
+```
+
+> ⚠️ 直接用 `configs/default.yaml` 对它默认的 `yolov8n.pt` 跑**动画**画面，`detect` 会报
+> `returned 0 raw box(es)`：COCO 权重只认「人」，平涂风格的动画帧基本检不出东西。这不是配置错误，
+> 报错里也会直接提示该换权重还是该调阈值。
+
 ### 在 VS Code 里运行 / 调试
 
 仓库自带 `.vscode/` 配置，打开文件夹即可按 <kbd>F5</kbd> 选配置运行（`.vscode/launch.json`，16 条）：
