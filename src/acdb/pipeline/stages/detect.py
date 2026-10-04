@@ -52,7 +52,6 @@ class DetectStage(Stage):
         processed = filtered = produced = 0
         items: List[str] = []
         reasons: Dict[str, int] = {}
-        per_frame: Dict[str, List[Detection]] = {}
         previous: Dict[str, List[Tuple[int, Detection]]] = {}
 
         try:
@@ -68,13 +67,13 @@ class DetectStage(Stage):
                     batch.append((record, image))
                     if len(batch) >= max(1, cfg.detect.batch_size):
                         processed, filtered, produced = self._flush(
-                            ctx, detector, batch, rows, reasons, previous, per_frame,
+                            ctx, detector, batch, rows, reasons, previous,
                             processed, filtered, produced, items,
                         )
                         batch = []
                 if batch:
                     processed, filtered, produced = self._flush(
-                        ctx, detector, batch, rows, reasons, previous, per_frame,
+                        ctx, detector, batch, rows, reasons, previous,
                         processed, filtered, produced, items,
                     )
         finally:
@@ -120,7 +119,6 @@ class DetectStage(Stage):
         rows: List[dict],
         reasons: Dict[str, int],
         previous: Dict[str, List[Tuple[int, Detection]]],
-        per_frame: Dict[str, List[Detection]],
         processed: int,
         filtered: int,
         produced: int,
@@ -146,7 +144,6 @@ class DetectStage(Stage):
                 (int(record["frame_idx"]), detection) for detection in keep
             ]
 
-            per_frame[frame_id] = keep
             for bbox_idx, detection in enumerate(keep):
                 rows.append(
                     {
